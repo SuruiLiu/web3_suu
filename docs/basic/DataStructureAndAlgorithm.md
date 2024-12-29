@@ -876,3 +876,986 @@ class TextEditor {
 ---
 
 这是字符串的内容，需要补充或调整什么吗？接下来我们可以开始学习第二周的树结构。
+
+# 数据结构与算法 - 第2周：树结构
+
+## 树的基础
+
+### 1. 树的基本概念
+- **定义**: 由节点和边组成的分层数据结构
+- **特点**:
+  - 有一个根节点
+  - 每个节点可以有多个子节点
+  - 没有环路
+  - 任意两个节点间有且仅有一条路径
+
+### 2. 二叉树
+```javascript
+// 二叉树节点定义
+class TreeNode {
+    constructor(val) {
+        this.val = val;
+        this.left = null;
+        this.right = null;
+    }
+}
+
+// 二叉树基本操作
+class BinaryTree {
+    constructor() {
+        this.root = null;
+    }
+    
+    // 插入节点
+    insert(val) {
+        const newNode = new TreeNode(val);
+        
+        if (!this.root) {
+            this.root = newNode;
+            return;
+        }
+        
+        const queue = [this.root];
+        while (queue.length) {
+            const node = queue.shift();
+            
+            if (!node.left) {
+                node.left = newNode;
+                return;
+            }
+            if (!node.right) {
+                node.right = newNode;
+                return;
+            }
+            
+            queue.push(node.left);
+            queue.push(node.right);
+        }
+    }
+    
+    // 三种遍历方式
+    preorder(node = this.root) {
+        if (!node) return [];
+        return [node.val, ...this.preorder(node.left), ...this.preorder(node.right)];
+    }
+    
+    inorder(node = this.root) {
+        if (!node) return [];
+        return [...this.inorder(node.left), node.val, ...this.inorder(node.right)];
+    }
+    
+    postorder(node = this.root) {
+        if (!node) return [];
+        return [...this.postorder(node.left), ...this.postorder(node.right), node.val];
+    }
+    
+    // 层序遍历
+    levelOrder() {
+        if (!this.root) return [];
+        
+        const result = [];
+        const queue = [this.root];
+        
+        while (queue.length) {
+            const level = [];
+            const levelSize = queue.length;
+            
+            for (let i = 0; i < levelSize; i++) {
+                const node = queue.shift();
+                level.push(node.val);
+                
+                if (node.left) queue.push(node.left);
+                if (node.right) queue.push(node.right);
+            }
+            
+            result.push(level);
+        }
+        
+        return result;
+    }
+}
+```
+
+### 3. 二叉搜索树(BST)
+```javascript
+class BST {
+    constructor() {
+        this.root = null;
+    }
+    
+    // 插入节点
+    insert(val) {
+        const newNode = new TreeNode(val);
+        
+        if (!this.root) {
+            this.root = newNode;
+            return;
+        }
+        
+        let current = this.root;
+        while (true) {
+            if (val < current.val) {
+                if (!current.left) {
+                    current.left = newNode;
+                    return;
+                }
+                current = current.left;
+            } else {
+                if (!current.right) {
+                    current.right = newNode;
+                    return;
+                }
+                current = current.right;
+            }
+        }
+    }
+    
+    // 查找节点
+    search(val) {
+        let current = this.root;
+        
+        while (current) {
+            if (val === current.val) return true;
+            if (val < current.val) current = current.left;
+            else current = current.right;
+        }
+        
+        return false;
+    }
+    
+    // 删除节点
+    delete(val) {
+        this.root = this._deleteNode(this.root, val);
+    }
+    
+    _deleteNode(node, val) {
+        if (!node) return null;
+        
+        if (val < node.val) {
+            node.left = this._deleteNode(node.left, val);
+        } else if (val > node.val) {
+            node.right = this._deleteNode(node.right, val);
+        } else {
+            // 找到要删除的节点
+            
+            // 情况1：叶子节点
+            if (!node.left && !node.right) {
+                return null;
+            }
+            
+            // 情况2：只有一个子节点
+            if (!node.left) return node.right;
+            if (!node.right) return node.left;
+            
+            // 情况3：有两个子节点
+            const minNode = this._findMin(node.right);
+            node.val = minNode.val;
+            node.right = this._deleteNode(node.right, minNode.val);
+        }
+        
+        return node;
+    }
+    
+    _findMin(node) {
+        while (node.left) {
+            node = node.left;
+        }
+        return node;
+    }
+}
+```
+
+### 4. 经典问题
+1. **验证二叉搜索树** [LeetCode 98](https://leetcode.cn/problems/validate-binary-search-tree/)
+```javascript
+function isValidBST(root) {
+    function validate(node, min, max) {
+        if (!node) return true;
+        
+        if (node.val <= min || node.val >= max) {
+            return false;
+        }
+        
+        return validate(node.left, min, node.val) && 
+               validate(node.right, node.val, max);
+    }
+    
+    return validate(root, -Infinity, Infinity);
+}
+```
+
+2. **二叉树的最大深度** [LeetCode 104](https://leetcode.cn/problems/maximum-depth-of-binary-tree/)
+```javascript
+function maxDepth(root) {
+    if (!root) return 0;
+    return Math.max(maxDepth(root.left), maxDepth(root.right)) + 1;
+}
+```
+
+### 5. 平衡二叉树(AVL树)
+```javascript
+class AVLNode {
+    constructor(val) {
+        this.val = val;
+        this.left = null;
+        this.right = null;
+        this.height = 1;  // 新节点高度为1
+    }
+}
+
+class AVLTree {
+    constructor() {
+        this.root = null;
+    }
+    
+    // 获取节点高度
+    height(node) {
+        return node ? node.height : 0;
+    }
+    
+    // 获取平衡因子
+    balanceFactor(node) {
+        return node ? this.height(node.left) - this.height(node.right) : 0;
+    }
+    
+    // 更新节点高度
+    updateHeight(node) {
+        node.height = Math.max(this.height(node.left), this.height(node.right)) + 1;
+    }
+    
+    // 右旋转
+    rightRotate(y) {
+        const x = y.left;
+        const T2 = x.right;
+        
+        x.right = y;
+        y.left = T2;
+        
+        this.updateHeight(y);
+        this.updateHeight(x);
+        
+        return x;
+    }
+    
+    // 左旋转
+    leftRotate(x) {
+        const y = x.right;
+        const T2 = y.left;
+        
+        y.left = x;
+        x.right = T2;
+        
+        this.updateHeight(x);
+        this.updateHeight(y);
+        
+        return y;
+    }
+    
+    // 插入节点
+    insert(val) {
+        this.root = this._insert(this.root, val);
+    }
+    
+    _insert(node, val) {
+        // 1. 执行标准BST插入
+        if (!node) return new AVLNode(val);
+        
+        if (val < node.val) {
+            node.left = this._insert(node.left, val);
+        } else {
+            node.right = this._insert(node.right, val);
+        }
+        
+        // 2. 更新高度
+        this.updateHeight(node);
+        
+        // 3. 获取平衡因子
+        const balance = this.balanceFactor(node);
+        
+        // 4. 如果不平衡，有四种情况
+        
+        // 左左情况
+        if (balance > 1 && val < node.left.val) {
+            return this.rightRotate(node);
+        }
+        
+        // 右右情况
+        if (balance < -1 && val > node.right.val) {
+            return this.leftRotate(node);
+        }
+        
+        // 左右情况
+        if (balance > 1 && val > node.left.val) {
+            node.left = this.leftRotate(node.left);
+            return this.rightRotate(node);
+        }
+        
+        // 右左情况
+        if (balance < -1 && val < node.right.val) {
+            node.right = this.rightRotate(node.right);
+            return this.leftRotate(node);
+        }
+        
+        return node;
+    }
+}
+```
+
+### 6. 红黑树
+```javascript
+const RED = true;
+const BLACK = false;
+
+class RBNode {
+    constructor(val) {
+        this.val = val;
+        this.left = null;
+        this.right = null;
+        this.color = RED;  // 新节点默认为红色
+        this.parent = null;
+    }
+}
+
+class RedBlackTree {
+    constructor() {
+        this.root = null;
+    }
+    
+    // 左旋转
+    leftRotate(node) {
+        const rightChild = node.right;
+        
+        node.right = rightChild.left;
+        if (rightChild.left) {
+            rightChild.left.parent = node;
+        }
+        
+        rightChild.parent = node.parent;
+        if (!node.parent) {
+            this.root = rightChild;
+        } else if (node === node.parent.left) {
+            node.parent.left = rightChild;
+        } else {
+            node.parent.right = rightChild;
+        }
+        
+        rightChild.left = node;
+        node.parent = rightChild;
+    }
+    
+    // 插入后修复红黑树性质
+    fixInsert(node) {
+        while (node.parent && node.parent.color === RED) {
+            if (node.parent === node.parent.parent.left) {
+                const uncle = node.parent.parent.right;
+                
+                if (uncle && uncle.color === RED) {
+                    // 情况1：叔叔节点是红色
+                    node.parent.color = BLACK;
+                    uncle.color = BLACK;
+                    node.parent.parent.color = RED;
+                    node = node.parent.parent;
+                } else {
+                    if (node === node.parent.right) {
+                        // 情况2：叔叔是黑色，当前节点是右子节点
+                        node = node.parent;
+                        this.leftRotate(node);
+                    }
+                    // 情况3：叔叔是黑色，当前节点是左子节点
+                    node.parent.color = BLACK;
+                    node.parent.parent.color = RED;
+                    this.rightRotate(node.parent.parent);
+                }
+            } else {
+                // 对称情况
+                const uncle = node.parent.parent.left;
+                // ... 类似上面的代码，左右对调
+            }
+        }
+        this.root.color = BLACK;
+    }
+}
+```
+
+### 7. 树的高级应用
+
+#### 7.1 前缀树(Trie)
+```javascript
+class TrieNode {
+    constructor() {
+        this.children = {};
+        this.isEndOfWord = false;
+    }
+}
+
+class Trie {
+    constructor() {
+        this.root = new TrieNode();
+    }
+    
+    // 插入单词
+    insert(word) {
+        let current = this.root;
+        
+        for (const char of word) {
+            if (!current.children[char]) {
+                current.children[char] = new TrieNode();
+            }
+            current = current.children[char];
+        }
+        
+        current.isEndOfWord = true;
+    }
+    
+    // 搜索单词
+    search(word) {
+        const node = this._searchNode(word);
+        return node !== null && node.isEndOfWord;
+    }
+    
+    // 判断是否有前缀
+    startsWith(prefix) {
+        return this._searchNode(prefix) !== null;
+    }
+    
+    _searchNode(str) {
+        let current = this.root;
+        
+        for (const char of str) {
+            if (!current.children[char]) {
+                return null;
+            }
+            current = current.children[char];
+        }
+        
+        return current;
+    }
+}
+```
+
+#### 7.2 线段树
+```javascript
+class SegmentTree {
+    constructor(arr) {
+        this.arr = arr;
+        this.tree = new Array(4 * arr.length);
+        if (arr.length) this.build(0, 0, arr.length - 1);
+    }
+    
+    // 构建线段树
+    build(node, start, end) {
+        if (start === end) {
+            this.tree[node] = this.arr[start];
+            return;
+        }
+        
+        const mid = Math.floor((start + end) / 2);
+        const leftNode = 2 * node + 1;
+        const rightNode = 2 * node + 2;
+        
+        this.build(leftNode, start, mid);
+        this.build(rightNode, mid + 1, end);
+        
+        this.tree[node] = this.tree[leftNode] + this.tree[rightNode];
+    }
+    
+    // 区间查询
+    query(node, start, end, left, right) {
+        if (left > end || right < start) return 0;
+        if (left <= start && right >= end) return this.tree[node];
+        
+        const mid = Math.floor((start + end) / 2);
+        const leftSum = this.query(2 * node + 1, start, mid, left, right);
+        const rightSum = this.query(2 * node + 2, mid + 1, end, left, right);
+        
+        return leftSum + rightSum;
+    }
+    
+    // 单点更新
+    update(node, start, end, index, val) {
+        if (start === end) {
+            this.arr[index] = val;
+            this.tree[node] = val;
+            return;
+        }
+        
+        const mid = Math.floor((start + end) / 2);
+        const leftNode = 2 * node + 1;
+        const rightNode = 2 * node + 2;
+        
+        if (index <= mid) {
+            this.update(leftNode, start, mid, index, val);
+        } else {
+            this.update(rightNode, mid + 1, end, index, val);
+        }
+        
+        this.tree[node] = this.tree[leftNode] + this.tree[rightNode];
+    }
+}
+```
+
+### 8. B树和B+树
+```javascript
+class BTreeNode {
+    constructor(isLeaf = true, t) {
+        this.isLeaf = isLeaf;
+        this.t = t;              // 最小度数
+        this.keys = [];          // 关键字数组
+        this.children = [];      // 子节点数组
+        this.n = 0;             // 当前关键字数量
+    }
+}
+
+class BTree {
+    constructor(t) {
+        this.root = null;
+        this.t = t;  // 最小度数
+    }
+    
+    // 分裂子节点
+    splitChild(parent, index, child) {
+        const newNode = new BTreeNode(child.isLeaf, this.t);
+        newNode.n = this.t - 1;
+        
+        // 复制后半部分的关键字到新节点
+        for (let j = 0; j < this.t - 1; j++) {
+            newNode.keys[j] = child.keys[j + this.t];
+        }
+        
+        // 如果不是叶子节点，复制后半部分的子节点
+        if (!child.isLeaf) {
+            for (let j = 0; j < this.t; j++) {
+                newNode.children[j] = child.children[j + this.t];
+            }
+        }
+        
+        child.n = this.t - 1;
+        
+        // 在父节点中插入新的子节点
+        for (let j = parent.n; j >= index + 1; j--) {
+            parent.children[j + 1] = parent.children[j];
+        }
+        
+        parent.children[index + 1] = newNode;
+        
+        // 在父节点中插入中间的关键字
+        for (let j = parent.n - 1; j >= index; j--) {
+            parent.keys[j + 1] = parent.keys[j];
+        }
+        
+        parent.keys[index] = child.keys[this.t - 1];
+        parent.n = parent.n + 1;
+    }
+    
+    // 在非满节点中插入关键字
+    insertNonFull(node, k) {
+        let i = node.n - 1;
+        
+        if (node.isLeaf) {
+            // 在叶子节点中插入关键字
+            while (i >= 0 && node.keys[i] > k) {
+                node.keys[i + 1] = node.keys[i];
+                i--;
+            }
+            
+            node.keys[i + 1] = k;
+            node.n = node.n + 1;
+        } else {
+            // 在内部节点中找到合适的子节点
+            while (i >= 0 && node.keys[i] > k) {
+                i--;
+            }
+            i++;
+            
+            if (node.children[i].n === 2 * this.t - 1) {
+                this.splitChild(node, i, node.children[i]);
+                if (k > node.keys[i]) {
+                    i++;
+                }
+            }
+            
+            this.insertNonFull(node.children[i], k);
+        }
+    }
+    
+    // 插入关键字
+    insert(k) {
+        if (!this.root) {
+            this.root = new BTreeNode(true, this.t);
+            this.root.keys[0] = k;
+            this.root.n = 1;
+            return;
+        }
+        
+        if (this.root.n === 2 * this.t - 1) {
+            const newRoot = new BTreeNode(false, this.t);
+            newRoot.children[0] = this.root;
+            this.splitChild(newRoot, 0, this.root);
+            this.root = newRoot;
+            this.insertNonFull(this.root, k);
+        } else {
+            this.insertNonFull(this.root, k);
+        }
+    }
+}
+```
+
+### 9. 并查集
+```javascript
+class UnionFind {
+    constructor(size) {
+        this.parent = new Array(size);
+        this.rank = new Array(size);
+        
+        // 初始化，每个元素的父节点是自己
+        for (let i = 0; i < size; i++) {
+            this.parent[i] = i;
+            this.rank[i] = 0;
+        }
+    }
+    
+    // 查找元素所属的集合（路径压缩）
+    find(x) {
+        if (this.parent[x] !== x) {
+            this.parent[x] = this.find(this.parent[x]);
+        }
+        return this.parent[x];
+    }
+    
+    // 合并两个集合（按秩合并）
+    union(x, y) {
+        let rootX = this.find(x);
+        let rootY = this.find(y);
+        
+        if (rootX !== rootY) {
+            if (this.rank[rootX] < this.rank[rootY]) {
+                [rootX, rootY] = [rootY, rootX];
+            }
+            this.parent[rootY] = rootX;
+            if (this.rank[rootX] === this.rank[rootY]) {
+                this.rank[rootX]++;
+            }
+        }
+    }
+    
+    // 判断两个元素是否属于同一个集合
+    connected(x, y) {
+        return this.find(x) === this.find(y);
+    }
+}
+```
+
+### 10. 实践项目：文件系统目录结构
+```javascript
+class FileNode {
+    constructor(name, isDirectory = false) {
+        this.name = name;
+        this.isDirectory = isDirectory;
+        this.children = new Map();  // 用于目录
+        this.content = '';         // 用于文件
+        this.parent = null;
+    }
+}
+
+class FileSystem {
+    constructor() {
+        this.root = new FileNode('/', true);
+        this.currentDir = this.root;
+    }
+    
+    // 创建目录
+    mkdir(path) {
+        const parts = path.split('/').filter(Boolean);
+        let current = this.root;
+        
+        for (const part of parts) {
+            if (!current.children.has(part)) {
+                const newDir = new FileNode(part, true);
+                newDir.parent = current;
+                current.children.set(part, newDir);
+            }
+            current = current.children.get(part);
+        }
+    }
+    
+    // 列出当前目录内容
+    ls() {
+        return Array.from(this.currentDir.children.keys()).sort();
+    }
+    
+    // 切换目录
+    cd(path) {
+        if (path === '/') {
+            this.currentDir = this.root;
+            return;
+        }
+        
+        if (path === '..') {
+            if (this.currentDir.parent) {
+                this.currentDir = this.currentDir.parent;
+            }
+            return;
+        }
+        
+        const dir = this.currentDir.children.get(path);
+        if (dir && dir.isDirectory) {
+            this.currentDir = dir;
+        }
+    }
+    
+    // 创建文件
+    touch(filename, content = '') {
+        const file = new FileNode(filename);
+        file.content = content;
+        file.parent = this.currentDir;
+        this.currentDir.children.set(filename, file);
+    }
+}
+
+// 使用示例
+const fs = new FileSystem();
+fs.mkdir('/home/user');
+fs.cd('/home');
+fs.touch('test.txt', 'Hello, World!');
+console.log(fs.ls());  // ['test.txt', 'user']
+```
+
+### 11. 最近公共祖先
+```javascript
+function lowestCommonAncestor(root, p, q) {
+    if (!root || root === p || root === q) return root;
+    
+    const left = lowestCommonAncestor(root.left, p, q);
+    const right = lowestCommonAncestor(root.right, p, q);
+    
+    if (!left) return right;  // p和q都在右子树
+    if (!right) return left;  // p和q都在左子树
+    return root;              // p和q分别在左右子树
+}
+```
+
+### 12. 路径和
+```javascript
+function hasPathSum(root, targetSum) {
+    if (!root) return false;
+    
+    // 叶子节点
+    if (!root.left && !root.right) {
+        return root.val === targetSum;
+    }
+    
+    return hasPathSum(root.left, targetSum - root.val) ||
+           hasPathSum(root.right, targetSum - root.val);
+}
+```
+
+### 13. B树和B+树详细实现
+
+#### 13.1 B树完整实现
+```javascript
+class BTreeNode {
+    constructor(isLeaf = true, t) {
+        this.isLeaf = isLeaf;
+        this.t = t;              // 最小度数
+        this.keys = [];          // 关键字数组
+        this.children = [];      // 子节点数组
+        this.n = 0;             // 当前关键字数量
+    }
+}
+
+class BTree {
+    constructor(t) {
+        this.root = null;
+        this.t = t;  // 最小度数
+    }
+    
+    // 分裂子节点
+    splitChild(parent, index, child) {
+        const newNode = new BTreeNode(child.isLeaf, this.t);
+        newNode.n = this.t - 1;
+        
+        // 复制后半部分的关键字到新节点
+        for (let j = 0; j < this.t - 1; j++) {
+            newNode.keys[j] = child.keys[j + this.t];
+        }
+        
+        // 如果不是叶子节点，复制后半部分的子节点
+        if (!child.isLeaf) {
+            for (let j = 0; j < this.t; j++) {
+                newNode.children[j] = child.children[j + this.t];
+            }
+        }
+        
+        child.n = this.t - 1;
+        
+        // 在父节点中插入新的子节点
+        for (let j = parent.n; j >= index + 1; j--) {
+            parent.children[j + 1] = parent.children[j];
+        }
+        
+        parent.children[index + 1] = newNode;
+        
+        // 在父节点中插入中间的关键字
+        for (let j = parent.n - 1; j >= index; j--) {
+            parent.keys[j + 1] = parent.keys[j];
+        }
+        
+        parent.keys[index] = child.keys[this.t - 1];
+        parent.n = parent.n + 1;
+    }
+    
+    // 在非满节点中插入关键字
+    insertNonFull(node, k) {
+        let i = node.n - 1;
+        
+        if (node.isLeaf) {
+            // 在叶子节点中插入关键字
+            while (i >= 0 && node.keys[i] > k) {
+                node.keys[i + 1] = node.keys[i];
+                i--;
+            }
+            
+            node.keys[i + 1] = k;
+            node.n = node.n + 1;
+        } else {
+            // 在内部节点中找到合适的子节点
+            while (i >= 0 && node.keys[i] > k) {
+                i--;
+            }
+            i++;
+            
+            if (node.children[i].n === 2 * this.t - 1) {
+                this.splitChild(node, i, node.children[i]);
+                if (k > node.keys[i]) {
+                    i++;
+                }
+            }
+            
+            this.insertNonFull(node.children[i], k);
+        }
+    }
+    
+    // 插入关键字
+    insert(k) {
+        if (!this.root) {
+            this.root = new BTreeNode(true, this.t);
+            this.root.keys[0] = k;
+            this.root.n = 1;
+            return;
+        }
+        
+        if (this.root.n === 2 * this.t - 1) {
+            const newRoot = new BTreeNode(false, this.t);
+            newRoot.children[0] = this.root;
+            this.splitChild(newRoot, 0, this.root);
+            this.root = newRoot;
+            this.insertNonFull(this.root, k);
+        } else {
+            this.insertNonFull(this.root, k);
+        }
+    }
+}
+```
+
+#### 13.2 B+树实现
+```javascript
+class BPlusTreeNode {
+    constructor(isLeaf = true) {
+        this.isLeaf = isLeaf;
+        this.keys = [];
+        this.children = [];
+        this.next = null;      // 叶子节点链表
+    }
+}
+
+class BPlusTree {
+    constructor(order) {
+        this.root = new BPlusTreeNode();
+        this.order = order;    // B+树的阶数
+    }
+    
+    // 查找关键字
+    search(key) {
+        let node = this.root;
+        
+        while (!node.isLeaf) {
+            let i = 0;
+            while (i < node.keys.length && key >= node.keys[i]) {
+                i++;
+            }
+            node = node.children[i];
+        }
+        
+        // 在叶子节点中查找
+        for (let i = 0; i < node.keys.length; i++) {
+            if (node.keys[i] === key) {
+                return node.children[i];  // 返回对应的数据
+            }
+        }
+        
+        return null;
+    }
+    
+    // 范围查询
+    rangeSearch(start, end) {
+        let node = this.root;
+        let result = [];
+        
+        // 找到起始叶子节点
+        while (!node.isLeaf) {
+            let i = 0;
+            while (i < node.keys.length && start >= node.keys[i]) {
+                i++;
+            }
+            node = node.children[i];
+        }
+        
+        // 收集范围内的数据
+        while (node) {
+            for (let i = 0; i < node.keys.length; i++) {
+                if (node.keys[i] >= start && node.keys[i] <= end) {
+                    result.push(node.children[i]);
+                }
+                if (node.keys[i] > end) {
+                    return result;
+                }
+            }
+            node = node.next;
+        }
+        
+        return result;
+    }
+}
+```
+
+### 14. B树和B+树的比较
+
+#### 14.1 主要区别
+1. **数据存储位置**：
+   - B树：所有节点都存储数据
+   - B+树：只有叶子节点存储数据
+
+2. **节点结构**：
+   - B树：每个节点包含键和数据
+   - B+树：内部节点只包含键，叶子节点包含键和数据
+
+3. **查询效率**：
+   - B树：可能在非叶子节点就找到数据
+   - B+树：总是要查询到叶子节点
+
+4. **范围查询**：
+   - B树：需要中序遍历
+   - B+树：利用叶子节点链表，更高效
+
+#### 14.2 应用场景
+1. **B树适用于**：
+   - 单条记录查询较多的场景
+   - 数据量相对较小的场景
+   - 内存存储的场景
+
+2. **B+树适用于**：
+   - 范围查询较多的场景
+   - 数据量很大的场景
+   - 磁盘存储（数据库索引）
+
+[继续...]
