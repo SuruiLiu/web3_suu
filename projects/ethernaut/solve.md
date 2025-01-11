@@ -686,9 +686,77 @@ contract AttackDexTwo {
 }
 ```
 
-## 24. Puzzle Wallet 🔒
+## 24. Puzzle Wallet ✅ [Hard]
 
-## 25. Motorbike 🔒
+这题有两个问题：
+1. 如何成为upgradeable合约的管理员
+因为UpgradeableProxy 中使用的delegatecall，admin所在的slot和puzzlewallet的max_balance所在的slot是同一个slot，所以可以通过调用来把admin改成自己并把自己加到whitelist里
+
+2. 怎么多次调用deposit
+在multicall里的deposit 的限制是 “只能调用一次”，但是没有限制multicall不能调用自己本身，可以将 multicall 调用嵌套在另一个 multicall 中，例如：
+multicall([
+  multicall([deposit])
+])
+在外层 multicall 中，depositCalled 变量重置为 false。内层调用的 multicall 会调用 deposit，然后再次嵌套，绕过了布尔变量的限制。
+
+## 25. Motorbike ✅ [Hard]
+
+重点在于理解：
+delegatecall的过程，还有代理合约和逻辑合约
+
+代理合约 (moto) 是存储变量的地方：
+代理合约用来保存所有状态变量，例如 initialized，这些变量的值实际存储在代理合约的存储槽中。
+当通过代理合约调用 engine 的 initialize 方法时，delegatecall 的作用是让 initialize 在代理合约的存储上下文中运行，因此会在代理合约的存储槽里设置 initialized = true。
+
+逻辑合约 (engine) 只提供代码：
+逻辑合约本身并不存储变量，它只定义了变量的布局和逻辑。
+如果直接调用逻辑合约的方法，例如 engine.initialize()，存储变量 initialized 对逻辑合约来说始终是未初始化的默认值（false），因为它并没有独立的存储。
+因此，每次直接调用 engine 的方法，initialized = true 都相当于一个临时变量的更改，不会被保存下来。
+
+```solidity
+fallback() external payable {
+    assembly {
+        // 1. 复制 calldata 到内存
+        calldatacopy(0, 0, calldatasize())
+
+        // 2. 使用 delegatecall 调用逻辑合约
+        let result := delegatecall(
+            gas(),                  // 转发所有剩余 gas
+            sload(implementation.slot), // 加载逻辑合约地址
+            0,                      // 输入数据起始地址
+            calldatasize(),         // 输入数据大小
+            0,                      // 输出数据起始地址
+            0                       // 输出数据大小
+        )
+
+        // 3. 将返回数据复制到内存
+        returndatacopy(0, 0, returndatasize())
+
+        // 4. 根据调用结果返回或回滚
+        switch result
+        case 0 { revert(0, returndatasize()) }
+        default { return(0, returndatasize()) }
+    }
+}
+```
+
+然后创建自定义合约以执行 selfdestruct
+部署一个恶意合约，使用 selfdestruct 摧毁逻辑合约：
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract Destroyer {
+    function destroy(address payable target) external {
+        selfdestruct(target);
+    }
+}
+```
+
+调用 destroy 函数，目标是逻辑合约地址：
+```javascript
+await destroyerContract.methods.destroy(logicAddress).send({ from: player });
+```
 
 ## 26. DoubleEntryPoint 🔒
 
