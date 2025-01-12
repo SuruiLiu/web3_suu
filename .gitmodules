@@ -1,0 +1,3 @@
+[submodule "projects/DameVulnerableDefi/projects/DamnVulnerableDefi"]
+	path = projects/DameVulnerableDefi/projects/DamnVulnerableDefi
+	url = https://github.com/theredguild/damn-vulnerable-defi.git

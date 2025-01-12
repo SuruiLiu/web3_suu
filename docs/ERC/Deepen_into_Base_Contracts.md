@@ -230,7 +230,151 @@ contract PausableToken is ERC20, Pausable, Ownable {
 }
 ```
 
-## 五、最佳实践
+## 五、Address 合约
+
+### 1. 基础概念
+Address 库提供了一组处理地址类型的实用函数，包括地址验证、合约交互和安全转账等功能。
+
+### 2. 核心功能实现
+
+```solidity
+library Address {
+    // 检查地址是否为合约
+    function isContract(address account) internal view returns (bool) {
+        uint256 size;
+        assembly {
+            size := extcodesize(account)
+        }
+        return size > 0;
+    }
+
+    // 安全转账 ETH
+    function sendValue(address payable recipient, uint256 amount) internal {
+        require(address(this).balance >= amount, "Address: insufficient balance");
+        (bool success, ) = recipient.call{value: amount}("");
+        require(success, "Address: unable to send value");
+    }
+
+    // 安全调用合约函数
+    function functionCall(address target, bytes memory data) internal returns (bytes memory) {
+        return functionCallWithValue(target, data, 0);
+    }
+
+    // 带 value 的安全调用
+    function functionCallWithValue(
+        address target,
+        bytes memory data,
+        uint256 value
+    ) internal returns (bytes memory) {
+        require(address(this).balance >= value, "Address: insufficient balance for call");
+        require(isContract(target), "Address: call to non-contract");
+        (bool success, bytes memory returndata) = target.call{value: value}(data);
+        return verifyCallResult(success, returndata);
+    }
+
+    // 使用 delegatecall 的安全调用
+    function functionDelegateCall(
+        address target,
+        bytes memory data
+    ) internal returns (bytes memory) {
+        require(isContract(target), "Address: delegate call to non-contract");
+        (bool success, bytes memory returndata) = target.delegatecall(data);
+        return verifyCallResult(success, returndata);
+    }
+
+    // 使用 staticcall 的安全调用
+    function functionStaticCall(
+        address target,
+        bytes memory data
+    ) internal view returns (bytes memory) {
+        require(isContract(target), "Address: static call to non-contract");
+        (bool success, bytes memory returndata) = target.staticcall(data);
+        return verifyCallResult(success, returndata);
+    }
+}
+```
+
+### 3. 主要功能说明
+
+1. **合约检测**
+```solidity
+// 检查地址是否为合约
+bool isContract = Address.isContract(address);
+```
+
+2. **ETH 转账**
+```solidity
+// 安全转账 ETH
+Address.sendValue(payable(recipient), amount);
+```
+
+3. **合约调用**
+```solidity
+// 普通调用
+bytes memory result = Address.functionCall(target, data);
+
+// 带 ETH 的调用
+bytes memory result = Address.functionCallWithValue(target, data, value);
+
+// 委托调用
+bytes memory result = Address.functionDelegateCall(target, data);
+
+// 静态调用
+bytes memory result = Address.functionStaticCall(target, data);
+```
+
+### 4. 使用场景
+
+1. **安全转账**
+```solidity
+contract SafeTransfer {
+    using Address for address payable;
+    
+    function withdraw(address payable recipient, uint256 amount) external {
+        recipient.sendValue(amount);  // 安全的 ETH 转账
+    }
+}
+```
+
+2. **合约交互**
+```solidity
+contract ContractCaller {
+    using Address for address;
+    
+    function safeCall(address target, bytes memory data) external {
+        require(target.isContract(), "Target must be a contract");
+        target.functionCall(data);
+    }
+}
+```
+
+3. **代理合约**
+```solidity
+contract Proxy {
+    using Address for address;
+    
+    function _delegate(address implementation) internal {
+        implementation.functionDelegateCall(msg.data);
+    }
+}
+```
+
+### 5. 安全考虑
+
+1. **合约检测的局限性**
+- `isContract` 在合约构造函数中返回 false
+- 不能完全依赖它来验证地址安全性
+
+2. **转账安全**
+- 使用 `sendValue` 而不是 `transfer` 或 `send`
+- 总是检查返回值
+
+3. **调用保护**
+- 验证目标地址
+- 处理调用返回值
+- 考虑重入风险
+
+## 六、最佳实践
 
 1. 权限管理
 - 合理使用 Ownable
