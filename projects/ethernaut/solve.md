@@ -897,5 +897,13 @@ require(!usedSignatures[signatureHash], "Signature already used");
 usedSignatures[signatureHash] = true;
 ```
 
-## 33. Magic Animal Carousel 🔒
+## 33. Magic Animal Carousel ✅[Medium]
+
+没有想象的第一眼难，只要看懂
+carousel 是一个 mapping(uint256 => uint256)，表示木马的每个 "箱子" 的状态：
+高 80 位 (ANIMAL_MASK)：存储动物名字的编码。
+中间 16 位 (NEXT_ID_MASK)：存储下一个箱子的 ID。
+低 160 位 (OWNER_MASK)：存储当前箱子的拥有者地址。
+就很简单，设计也很精妙，因为加起来刚好256位，所以可以完美存储（EVM执行每条指令256位）
+隐藏难点在于输入进去的animal名字其实不能超过10个字节，但是限制是12个字节
 
