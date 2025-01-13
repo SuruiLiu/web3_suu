@@ -816,11 +816,86 @@ function attack() public {
 }
 ```
 
-## 30. Privacy 2 🔒
+## 30. HigherOrder ✅[Hard]
 
-## 31. Climber 🔒
+这关主要考察calldata的理解，在 Solidity 中，calldata 是函数调用时发送给合约的一段原始数据，包含以下结构：
+函数选择器（前 4 字节）：决定调用哪个函数。
+参数数据：紧跟选择器之后，包含函数的输入参数。
+例如，对于 registerTreasury(uint8)，正常的 calldata 结构是：
 
-## 32. Recovery 2 🔒
+[ 函数选择器 (4字节) ][ 参数 (32字节，实际是 uint8 范围内的值) ]
 
-## 33. Puppet 🔒
+但由于 assembly 直接读取了第 4 字节以后的 32 字节 数据，整个参数范围被扩大了。可以通过手动构造 calldata 来传递超过 uint8 范围的值。
+
+```solidity
+// 手动发送 calldata，绕过 uint8 限制
+bytes memory payload = abi.encodeWithSignature("registerTreasury(uint8)", uint256(256));
+(bool success, ) = address(target).call(payload);
+require(success, "Failed to register treasury");
+```
+
+## 31. Stake ✅[Medium]
+
+思路:
+攻击StakeWETH，因为WETH可以自己实现，并且这里的call直接去执行WETH的approve方法和transferfrom方法，我可以满足它的检测bytesToUint满足，然后不转入，但是还是加了amount，所以我可以满足题意
+
+## 32. impersonator ✅[Hard]
+
+思路：
+这个看了很久，首先确定ecrecover 是以太坊内置函数，用于从签名中恢复签名者的地址。
+note：它的主要用途是验证一条消息是否由某个以太坊地址持有的私钥签名。通过 ecrecover，我们可以验证签名者的身份，而不需要直接访问私钥。
+然后确定除了lock的constructor部分外其他都没啥问题，于是仔细研究constructor
+```solidity
+bytes32 _msgHash;
+assembly {
+    mstore(0x00, "\x19Ethereum Signed Message:\n32") // 28 bytes
+    mstore(0x1C, _lockId) // 32 bytes
+    _msgHash := keccak256(0x00, 0x3c) //28 + 32 = 60 bytes
+}
+msgHash = _msgHash;
+``` 
+生成一个哈希值（msgHash），用作签名验证的基础。将固定前缀 "\x19Ethereum Signed Message:\n32" 存入内存起始位置 0x00。这是以太坊的 EIP-191 标准，要求在签名前加前缀，防止重放攻击。
+```solidity
+address initialController = address(1);
+assembly {
+    let ptr := mload(0x40)
+    mstore(ptr, _msgHash) // 32 bytes
+    mstore(add(ptr, 32), mload(add(_signature, 0x60))) // 32 byte v
+    mstore(add(ptr, 64), mload(add(_signature, 0x20))) // 32 bytes r
+    mstore(add(ptr, 96), mload(add(_signature, 0x40))) // 32 bytes s
+    pop(
+        staticcall(
+            gas(), // Amount of gas left for the transaction.
+            initialController, // Address of `ecrecover`.
+            ptr, // Start of input.
+            0x80, // Size of input.
+            0x00, // Start of output.
+            0x20 // Size of output.
+        )
+    )
+    if iszero(returndatasize()) {
+        mstore(0x00, 0x8baa579f) // `InvalidSignature()`.
+        revert(0x1c, 0x04)
+    }
+    initialController := mload(0x00)
+    mstore(0x40, add(ptr, 128))
+}
+``` 
+从 _signature 中恢复签名者地址，作为初始控制器（initialController）staticcall
+尝试调用 ecrecover 合约，恢复签名者地址。
+错误：这里错误地将 initialController（address(1)）作为调用目标地址，而 ecrecover 是内置函数，根本不需要合约地址。
+修复：
+```solidity
+// Recover the address from the signature
+    (bytes32 r, bytes32 s, uint8 v) = abi.decode(_signature, (bytes32, bytes32, uint8));
+    address initialController = ecrecover(msgHash, v, r, s);
+    require(initialController != address(0), "Invalid signature");
+
+// Prevent signature reuse
+bytes32 signatureHash = keccak256(_signature);
+require(!usedSignatures[signatureHash], "Signature already used");
+usedSignatures[signatureHash] = true;
+```
+
+## 33. Magic Animal Carousel 🔒
 
