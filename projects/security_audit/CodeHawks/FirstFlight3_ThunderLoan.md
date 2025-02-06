@@ -39,7 +39,10 @@ getCalculatedFee(IERC20 token, uint256 amount)计算闪电贷的手续费，也�
 这个就是slither扫出来的vulnerability，说要你先乘完再除divide-before-multiply
 
 ThunderLoanUpgraded：
+基本和ThunderLoan差不多，在deposit中把更新汇率删了
+state variables存储的和ThunderLoan不一致，会导致存储问题
 
+补充一下升级合约的：
 
 vulnerabilities：
 H:
@@ -48,6 +51,25 @@ H:
 3. deposit重入攻击 Invalid
 4. flashloan中的计算balance方法是uint256 endingBalance = token.balanceOf(address(assetToken));
 那么，我只要满足token的balance增加不就行了，不一定用repay来增加，因为deposit好像也能行 Valid
+5. 升级时存储冲突，state variables换了个位置就会导致s_flashLoanFee不再正确 Valic
+6. 非标准ERC20的代币会导致价格计算不一样，也就是说getCalculatedFee默认传进来的token的decimal是18这是不对的
+```solidity
+function getCalculatedFee(IERC20 token, uint256 amount) public view returns (uint256 fee) {
+        
+        //1 ETH = 1e18 WEI
+        //2000 USDT = 2 * 1e9 WEI
+
+        uint256 valueOfBorrowedToken = (amount * getPriceInWeth(address(token))) / s_feePrecision;
+
+        // valueOfBorrowedToken ETH = 1e18 * 1e18 / 1e18 WEI
+        // valueOfBorrowedToken USDT= 2 * 1e9 * 1e18 / 1e18 WEI
+
+        fee = (valueOfBorrowedToken * s_flashLoanFee) / s_feePrecision;
+
+        //fee ETH = 1e18 * 3e15 / 1e18 = 3e15 WEI = 0,003 ETH
+        //fee USDT: 2 * 1e9 * 3e15 / 1e18 = 6e6 WEI = 0,000000000006 ETH
+    }
+```
 M：
 1. 先乘再除
 2. 如果有个token质押了，但是被setAllowedToken的时候删除了映射，那这个代币就被锁在里面了
@@ -57,3 +79,29 @@ L：
 2. updateFlashLoanFee 缺少event
 3. getCalculatedFee计算可能导致精度丢失，还是得研究一下这个方法getPriceInWeth(address(token)在OracleUpgradeable里
 
+
+补充一下Initializable, OwnableUpgradeable, UUPSUpgradeable, OracleUpgradeable相关的升级：
+Initializable 是 OpenZeppelin 提供的基础合约，用于防止初始化函数被多次调用。由于升级合约没有构造函数（因为代理合约通过 delegatecall 调用逻辑合约），需要使用初始化函数进行设置。
+- modifier initializer()确保初始化函数只能调用一次
+- _disableInitializers()禁用初始化函数以避免重复初始化。
+OwnableUpgradeable 是 OpenZeppelin 提供的权限管理模块，通过所有权控制合约的关键操作。限制某些操作只能由所有者执行，例如升级合约。允许安全转移合约所有权。
+UUPSUpgradeable (Universal Upgradeable Proxy Standard) 是一种升级代理模式，使得合约本身能够控制升级逻辑。通过 UUPSUpgradeable 模式，避免存储冲突，简化升级流程，同时确保只有授权地址（通常是所有者）能执行升级。
+- function _authorizeUpgrade(address newImplementation) internal virtual;必须由子合约实现，用于授权升级逻辑。
+- function upgradeTo(address newImplementation)升级到新的实现合约地址：
+``` solidity
+function upgradeTo(address newImplementation) external virtual onlyProxy {
+    _authorizeUpgrade(newImplementation);
+    _upgradeToAndCallUUPS(newImplementation, bytes(""), false);
+}
+```
+OracleUpgradeable该合约假设提供预言机功能，通常用于获取外部数据（如价格、链上数据等），支持升级机制。
+
+第一版ThunderLoan合约要升级到第二版ThunberLoanUpgraded，怎么操作呢，也就是部署了第一版的ThunderLoan之后应该是，部署第二版ThunberLoanUpgraded合约，然后调用第一版的upgradeTo()传入第二版的部署address。那升级之后怎么就变成了，调用同样的方法使用的是第二版升级后的合约的方法呢，难道是所有的方法请求执行都是在proxy合约中调用proxy中保存的最新的ThunderLoan地址加delegatecall来请求方法执行？
+这是因为代理合约利用了 delegatecall 来处理请求。
+delegatecall 的作用是在代理合约的上下文中执行逻辑合约的方法
+逻辑合约的方法会读取、写入 代理合约的存储。msg.sender 和 msg.value 等上下文信息仍然保持用户调用时的状态。
+请求流程：
+用户通过代理合约调用方法，例如 borrow()。
+代理合约拦截请求，通过 delegatecall 转发到逻辑合约地址（存储在 implementation 变量中）。
+执行时实际使用的逻辑合约地址就是最新的 ThunderLoanUpgraded。
+关于不同升级的模式比较具体看UpgradeablePatterns_Tutorial

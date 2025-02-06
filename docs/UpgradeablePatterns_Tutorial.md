@@ -254,6 +254,17 @@ Slot 1+: 业务数据
 - 实现复杂
 - 需要在逻辑合约中包含升级代码
 
+vs透明代理（Transparent Proxy）：
+
+需要一个额外的 代理合约（通常叫 ProxyAdmin）。
+ProxyAdmin 负责调用 upgrade() 或 upgradeTo() 来升级逻辑合约。
+用户调用逻辑方法时通过代理转发到目标合约，代理合约控制升级权限。
+UUPS（Upgradeable Universal Proxy Standard）：
+
+逻辑合约自己实现了升级功能，通过继承 UUPSUpgradeable.sol 来具备代理升级能力。
+没有额外的 ProxyAdmin 合约，而是直接调用逻辑合约中的 upgradeTo() 来完成升级。
+逻辑合约本身通过 delegatecall 处理请求，并管理自身的升级。
+
 ### 3. Beacon
 优点:
 - 支持批量升级
