@@ -41,6 +41,7 @@ src/
 仲裁方与双方进行线下沟通，并通过调用 Escrow::resolveDispute 对争议进行处理，根据情况将资金退还给买方或卖方，同时清空 Escrow。
 
 补充说明create2：
+主要是能够预测部署之后的合约地址
 
 很简单的几个功能functions就不细写了
 
